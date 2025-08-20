@@ -15,43 +15,42 @@ NobleBooksFactory implements the vision described in the PRD to create a compreh
 - **Real-time**: Socket.io client for progress updates
 
 ### Backend
-- **Server**: Node.js + Express with microservices architecture
-- **AI Framework**: LangChain.js for multi-agent orchestration
+- **Server**: FastAPI (Python) with async support
+- **AI Framework**: LangChain + LangGraph for multi-agent orchestration  
 - **Database**: PostgreSQL + MongoDB + Redis (planned)
-- **Real-time**: Socket.io for progress tracking
-- **Queue**: Bull/BullMQ for agent task processing (planned)
+- **Real-time**: WebSocket for progress tracking
+- **Multi-Agent**: Research, Content Generation, and Editorial agents
 
 ## 🤖 Multi-Agent System
 
 ### Core Agents
 
-#### 1. Research Agent (`ResearchAgent.js`)
+#### 1. Research Agent (`research_agent.py`)
 - **Purpose**: Conducts comprehensive research on any topic
 - **Capabilities**:
-  - Multi-source data gathering (academic, news, social, market)
+  - Web research via Serper/Tavily APIs with fallbacks
   - Intelligent research planning with targeted questions
-  - Analysis and synthesis of findings
-  - Credibility scoring and source verification
+  - Analysis and synthesis of findings  
+  - Quality scoring and source verification
 - **LLM**: Configurable (default: Claude for accuracy)
 
-#### 2. Content Generation Agent (`ContentGenerationAgent.js`)
+#### 2. Content Generation Agent (`content_agent.py`)
 - **Purpose**: Creates structured, engaging book content
 - **Capabilities**:
   - Book outline generation with logical progression
-  - Chapter-by-chapter content creation
+  - Chapter-by-chapter content creation with progress tracking
   - Introduction and conclusion generation
   - Table of contents and book assembly
   - Multiple writing styles and target audiences
 - **LLM**: Configurable (default: GPT-4 for creativity)
 
-#### 3. Editorial Agent (`EditorialAgent.js`)
+#### 3. Editorial Agent (planned)
 - **Purpose**: Quality assurance and content review
 - **Capabilities**:
   - Grammar and style checking
   - Factual accuracy verification
   - Readability assessment
   - Book-wide consistency review
-  - Detailed improvement recommendations
 - **LLM**: Configurable (default: Claude for precision)
 
 ## 🔧 LLM Provider System
@@ -76,8 +75,9 @@ If a preferred provider is unavailable, the system automatically falls back to t
 ## 🚀 Quick Start
 
 ### Prerequisites
+- Python 3.9+
 - Node.js 18+ 
-- API keys for at least one LLM provider
+- API keys for at least one LLM provider (OpenAI or Anthropic)
 
 ### Installation
 
@@ -87,15 +87,17 @@ If a preferred provider is unavailable, the system automatically falls back to t
    cd NobleBooksFactory
    ```
 
-2. **Set up Frontend**
-   ```bash
-   cd frontend
-   npm install
-   ```
-
-3. **Set up Backend**
+2. **Set up Python Backend**
    ```bash
    cd backend
+   pip install -r requirements.txt
+   # OR for development
+   pip install -e .
+   ```
+
+3. **Set up React Frontend**
+   ```bash
+   cd frontend
    npm install
    ```
 
@@ -103,18 +105,20 @@ If a preferred provider is unavailable, the system automatically falls back to t
    ```bash
    cd backend
    cp .env.example .env
-   # Add your API keys to .env
+   # Add your API keys to .env (at minimum OPENAI_API_KEY or ANTHROPIC_API_KEY)
    ```
 
 ### Running the System
 
-1. **Start Backend**
+1. **Start Python Backend**
    ```bash
    cd backend
-   npm run dev
+   python start.py
+   # OR
+   uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
    ```
 
-2. **Start Frontend** (in another terminal)
+2. **Start React Frontend** (in another terminal)
    ```bash
    cd frontend  
    npm run dev
@@ -122,8 +126,9 @@ If a preferred provider is unavailable, the system automatically falls back to t
 
 3. **Access the Application**
    - Frontend: http://localhost:5173
-   - Backend API: http://localhost:3001
-   - Health Check: http://localhost:3001/health
+   - Backend API: http://localhost:8000
+   - API Documentation: http://localhost:8000/docs
+   - Health Check: http://localhost:8000/api/v1/health
 
 ## 🧪 Testing
 

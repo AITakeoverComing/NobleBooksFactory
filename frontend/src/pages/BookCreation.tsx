@@ -1,12 +1,24 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ProgressBar } from '../components/ui/ProgressBar';
-import { BookOpen, Search, Lightbulb, Edit, Eye, Upload } from 'lucide-react';
+import { BookOpen, Search, Lightbulb, Edit, Eye, Upload, AlertCircle } from 'lucide-react';
+import { apiService, BookResponse } from '../services/api';
 
 export function BookCreation() {
   const [currentStep, setCurrentStep] = useState(1);
   const [bookTopic, setBookTopic] = useState('');
   const [selectedAudience, setSelectedAudience] = useState('');
   const [bookLength, setBookLength] = useState('medium');
+  const [writingStyle, setWritingStyle] = useState('professional');
+  const [chapterCount, setChapterCount] = useState(8);
+  const [includeExamples, setIncludeExamples] = useState(true);
+  
+  // Book generation state
+  const [currentBook, setCurrentBook] = useState<BookResponse | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
+  // WebSocket for real-time updates
+  const [websocket, setWebsocket] = useState<WebSocket | null>(null);
 
   const steps = [
     { id: 1, title: 'Topic Selection', icon: Lightbulb },
@@ -31,6 +43,93 @@ export function BookCreation() {
     'Cryptocurrency for Small Business Owners',
     'Digital Marketing Trends and Predictions'
   ];
+
+  // Start book generation
+  const startBookGeneration = async () => {
+    if (!bookTopic || !selectedAudience) {
+      setError('Please fill in all required fields');
+      return;
+    }
+
+    setIsGenerating(true);
+    setError(null);
+    setCurrentStep(2);
+
+    try {
+      const bookResponse = await apiService.createBook({
+        topic: bookTopic,
+        target_audience: selectedAudience,
+        writing_style: writingStyle,
+        book_length: bookLength,
+        chapter_count: chapterCount,
+        include_examples: includeExamples,
+        include_exercises: false,
+      });
+
+      setCurrentBook(bookResponse);
+      
+      // Set up WebSocket for real-time updates
+      const clientId = `book_${bookResponse.id}`;
+      const ws = apiService.createWebSocket(clientId);
+      
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'book_progress' && data.book_id === bookResponse.id) {
+            setCurrentBook(prev => prev ? {
+              ...prev,
+              status: data.status,
+              progress: data.progress,
+              message: data.message
+            } : null);
+          }
+        } catch (e) {
+          console.error('WebSocket message parsing error:', e);
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+      };
+
+      setWebsocket(ws);
+
+      // Poll for updates as fallback
+      const pollInterval = setInterval(async () => {
+        try {
+          const updatedBook = await apiService.getBook(bookResponse.id);
+          setCurrentBook(updatedBook);
+          
+          if (updatedBook.status === 'completed' || updatedBook.status === 'failed') {
+            clearInterval(pollInterval);
+            setIsGenerating(false);
+            if (updatedBook.status === 'completed') {
+              setCurrentStep(5); // Go to completion step
+            }
+          }
+        } catch (error) {
+          console.error('Error polling book status:', error);
+        }
+      }, 2000);
+
+      // Clean up polling after 10 minutes
+      setTimeout(() => clearInterval(pollInterval), 600000);
+      
+    } catch (error) {
+      setError(`Failed to start book generation: ${error}`);
+      setIsGenerating(false);
+      setCurrentStep(1);
+    }
+  };
+
+  // Clean up WebSocket on unmount
+  useEffect(() => {
+    return () => {
+      if (websocket) {
+        websocket.close();
+      }
+    };
+  }, [websocket]);
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
@@ -156,16 +255,23 @@ export function BookCreation() {
               </div>
             </div>
 
+            {error && (
+              <div className="flex items-center space-x-2 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <AlertCircle className="h-5 w-5 text-red-500" />
+                <span className="text-red-700">{error}</span>
+              </div>
+            )}
+
             <div className="flex justify-end space-x-3 pt-6 border-t">
               <button className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
                 Save Draft
               </button>
               <button
-                onClick={() => setCurrentStep(2)}
-                disabled={!bookTopic || !selectedAudience}
+                onClick={startBookGeneration}
+                disabled={!bookTopic || !selectedAudience || isGenerating}
                 className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
               >
-                Start AI Research
+                {isGenerating ? 'Starting...' : 'Start AI Generation'}
               </button>
             </div>
           </div>
@@ -174,16 +280,43 @@ export function BookCreation() {
         {currentStep === 2 && (
           <div className="space-y-6">
             <div className="text-center">
-              <h2 className="text-2xl font-semibold text-gray-900 mb-2">AI Research in Progress</h2>
-              <p className="text-gray-600">Our research agents are gathering comprehensive information on "{bookTopic}"</p>
+              <h2 className="text-2xl font-semibold text-gray-900 mb-2">AI Book Generation in Progress</h2>
+              <p className="text-gray-600">Creating your book on "{bookTopic}"</p>
+              {currentBook && (
+                <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+                  <p className="text-blue-800 font-medium">Status: {currentBook.message}</p>
+                  <ProgressBar progress={currentBook.progress} />
+                  <p className="text-sm text-blue-600 mt-2">Progress: {currentBook.progress}%</p>
+                </div>
+              )}
             </div>
 
             <div className="space-y-4">
               {[
-                { agent: 'Trend Analysis Agent', status: 'Completed', progress: 100, task: 'Analyzing market trends and opportunities' },
-                { agent: 'Source Collection Agent', status: 'Active', progress: 75, task: 'Gathering information from 127 sources' },
-                { agent: 'Fact Verification Agent', status: 'Active', progress: 60, task: 'Verifying claims and statistics' },
-                { agent: 'Competitive Analysis Agent', status: 'Queued', progress: 0, task: 'Analyzing existing books and content' }
+                { 
+                  agent: 'Research Agent', 
+                  status: currentBook?.status === 'researching' ? 'Active' : 
+                          currentBook?.progress > 30 ? 'Completed' : 'Pending',
+                  progress: currentBook?.status === 'researching' ? Math.min(currentBook.progress * 3, 100) : 
+                           currentBook?.progress > 30 ? 100 : 0,
+                  task: 'Conducting comprehensive research and data collection'
+                },
+                { 
+                  agent: 'Content Generation Agent', 
+                  status: currentBook?.status === 'writing_content' || currentBook?.status === 'generating_outline' ? 'Active' : 
+                          currentBook?.progress > 85 ? 'Completed' : 'Pending',
+                  progress: currentBook?.status === 'writing_content' ? currentBook.progress : 
+                           currentBook?.progress > 85 ? 100 : 0,
+                  task: 'Creating book outline and writing chapters'
+                },
+                { 
+                  agent: 'Quality Review Agent', 
+                  status: currentBook?.status === 'reviewing' ? 'Active' : 
+                          currentBook?.status === 'completed' ? 'Completed' : 'Pending',
+                  progress: currentBook?.status === 'reviewing' ? currentBook.progress : 
+                           currentBook?.status === 'completed' ? 100 : 0,
+                  task: 'Reviewing content quality and accuracy'
+                }
               ].map((agent, index) => (
                 <div key={index} className="p-4 border border-gray-200 rounded-lg">
                   <div className="flex items-center justify-between mb-3">
